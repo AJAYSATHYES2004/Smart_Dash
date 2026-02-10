@@ -1,0 +1,209 @@
+@import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;500;600;700;800;900&family=Inter:wght@300;400;500;600;700&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    /* Dark Automotive Theme */
+    --background: 220 20% 6%;
+    --foreground: 210 40% 98%;
+
+    --card: 220 20% 10%;
+    --card-foreground: 210 40% 98%;
+
+    --popover: 220 20% 8%;
+    --popover-foreground: 210 40% 98%;
+
+    /* Neon Cyan Primary */
+    --primary: 185 100% 50%;
+    --primary-foreground: 220 20% 6%;
+
+    /* Dark Secondary */
+    --secondary: 220 20% 15%;
+    --secondary-foreground: 210 40% 98%;
+
+    --muted: 220 15% 18%;
+    --muted-foreground: 215 15% 55%;
+
+    --accent: 185 100% 50%;
+    --accent-foreground: 220 20% 6%;
+
+    /* Emergency Red */
+    --destructive: 0 85% 55%;
+    --destructive-foreground: 210 40% 98%;
+
+    --border: 220 15% 20%;
+    --input: 220 15% 18%;
+    --ring: 185 100% 50%;
+
+    --radius: 0.75rem;
+
+    /* Custom Dashboard Colors */
+    --neon-cyan: 185 100% 50%;
+    --neon-glow: 185 100% 60%;
+    --warning-amber: 38 95% 55%;
+    --success-green: 142 75% 45%;
+    --emergency-red: 0 85% 55%;
+    --engine-orange: 25 95% 55%;
+    
+    /* Gradients */
+    --gradient-dashboard: linear-gradient(135deg, hsl(220 20% 6%) 0%, hsl(220 25% 10%) 50%, hsl(220 20% 6%) 100%);
+    --gradient-card: linear-gradient(180deg, hsl(220 20% 12%) 0%, hsl(220 20% 8%) 100%);
+    --gradient-speedometer: conic-gradient(from 135deg, hsl(185 100% 50%) 0%, hsl(142 75% 45%) 25%, hsl(38 95% 55%) 50%, hsl(0 85% 55%) 75%, hsl(0 85% 55%) 100%);
+    --gradient-neon: linear-gradient(180deg, hsl(185 100% 60%) 0%, hsl(185 100% 40%) 100%);
+    
+    /* Shadows */
+    --shadow-neon: 0 0 20px hsl(185 100% 50% / 0.4), 0 0 40px hsl(185 100% 50% / 0.2);
+    --shadow-card: 0 4px 24px hsl(0 0% 0% / 0.4);
+    --shadow-warning: 0 0 20px hsl(38 95% 55% / 0.4);
+    --shadow-danger: 0 0 20px hsl(0 85% 55% / 0.5);
+    --shadow-success: 0 0 20px hsl(142 75% 45% / 0.4);
+
+    --sidebar-background: 220 20% 8%;
+    --sidebar-foreground: 210 40% 98%;
+    --sidebar-primary: 185 100% 50%;
+    --sidebar-primary-foreground: 220 20% 6%;
+    --sidebar-accent: 220 20% 15%;
+    --sidebar-accent-foreground: 210 40% 98%;
+    --sidebar-border: 220 15% 20%;
+    --sidebar-ring: 185 100% 50%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background text-foreground antialiased;
+    font-family: 'Inter', sans-serif;
+  }
+
+  .font-display {
+    font-family: 'Orbitron', monospace;
+  }
+}
+
+@layer components {
+  /* Neon Glow Effects */
+  .neon-glow {
+    box-shadow: var(--shadow-neon);
+  }
+
+  .neon-text {
+    text-shadow: 0 0 10px hsl(var(--neon-cyan) / 0.8), 0 0 20px hsl(var(--neon-cyan) / 0.5);
+  }
+
+  .warning-glow {
+    box-shadow: var(--shadow-warning);
+  }
+
+  .danger-glow {
+    box-shadow: var(--shadow-danger);
+  }
+
+  .success-glow {
+    box-shadow: var(--shadow-success);
+  }
+
+  /* Dashboard Card */
+  .dashboard-card {
+    @apply rounded-xl border border-border/50 p-4;
+    background: var(--gradient-card);
+    box-shadow: var(--shadow-card);
+  }
+
+  /* Speedometer Ring */
+  .speedometer-ring {
+    background: var(--gradient-speedometer);
+  }
+
+  /* Indicator Lights */
+  .indicator-light {
+    @apply w-4 h-4 rounded-full transition-all duration-300;
+  }
+
+  .indicator-light.active {
+    @apply animate-pulse;
+  }
+
+  /* Control Button Base */
+  .control-btn {
+    @apply relative flex items-center justify-center rounded-lg border transition-all duration-300;
+    @apply hover:scale-105 active:scale-95;
+  }
+
+  /* Gauge Needle Animation */
+  @keyframes needleMove {
+    0%, 100% { transform: rotate(-135deg); }
+    50% { transform: rotate(var(--needle-angle)); }
+  }
+
+  /* Pulse Animation for Indicators */
+  @keyframes indicatorPulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.3; }
+  }
+
+  .indicator-blink {
+    animation: indicatorPulse 0.5s ease-in-out infinite;
+  }
+
+  /* Neon Border Animation */
+  @keyframes neonPulse {
+    0%, 100% { 
+      box-shadow: 0 0 5px hsl(var(--neon-cyan) / 0.5), 
+                  0 0 10px hsl(var(--neon-cyan) / 0.3),
+                  0 0 20px hsl(var(--neon-cyan) / 0.2);
+    }
+    50% { 
+      box-shadow: 0 0 10px hsl(var(--neon-cyan) / 0.8), 
+                  0 0 20px hsl(var(--neon-cyan) / 0.5),
+                  0 0 40px hsl(var(--neon-cyan) / 0.3);
+    }
+  }
+
+  .neon-pulse {
+    animation: neonPulse 2s ease-in-out infinite;
+  }
+
+  /* Speed Warning Animation */
+  @keyframes speedWarning {
+    0%, 100% { border-color: hsl(var(--warning-amber)); }
+    50% { border-color: hsl(var(--emergency-red)); }
+  }
+
+  .speed-warning {
+    animation: speedWarning 0.5s ease-in-out infinite;
+  }
+
+  /* Emergency Shake */
+  @keyframes emergencyShake {
+    0%, 100% { transform: translateX(0); }
+    25% { transform: translateX(-5px); }
+    75% { transform: translateX(5px); }
+  }
+
+  .emergency-shake {
+    animation: emergencyShake 0.1s ease-in-out 5;
+  }
+
+  /* Smooth transitions for all interactive elements */
+  .smooth-transition {
+    @apply transition-all duration-300 ease-in-out;
+  }
+}
+
+@layer utilities {
+  .text-gradient {
+    @apply bg-clip-text text-transparent;
+    background-image: var(--gradient-neon);
+  }
+
+  .bg-dashboard {
+    background: var(--gradient-dashboard);
+  }
+}
