@@ -23,6 +23,16 @@ const CarLogin = () => {
 
         const success = await loginCar(numberPlate, secretCode);
         if (success) {
+            // Check if insurance details are missing
+            const savedCar = localStorage.getItem('authenticatedCar');
+            if (savedCar) {
+                const carDetails = JSON.parse(savedCar);
+                if (!carDetails.policyNumber) {
+                    // Redirect to insurance page for onboarding
+                    navigate('/insurance?mode=onboarding');
+                    return;
+                }
+            }
             navigate('/login');
         } else {
             setError('Invalid car credentials. Please check your number plate and secret code.');
@@ -44,9 +54,9 @@ const CarLogin = () => {
                         initial={{ scale: 0 }}
                         animate={{ scale: 1 }}
                         transition={{ delay: 0.2, type: 'spring', stiffness: 200 }}
-                        className="inline-flex items-center justify-center w-24 h-24 rounded-full bg-secondary border-2 border-primary neon-glow mb-4"
+                        className="inline-flex items-center justify-center w-24 h-24 rounded-full bg-secondary overflow-hidden border-2 border-primary neon-glow mb-4"
                     >
-                        <Car className="w-12 h-12 text-primary" />
+                        <img src="/logo.png" alt="Smart Dash Logo" className="w-full h-full object-cover" />
                     </motion.div>
                     <h1 className="text-3xl font-display font-bold text-foreground neon-text">
                         Car Authentication
@@ -138,8 +148,8 @@ const CarLogin = () => {
                     <div className="mt-6 p-4 rounded-lg bg-secondary/30 border border-border">
                         <p className="text-xs text-muted-foreground text-center">
                             <strong className="text-foreground">Test Credentials:</strong><br />
-                            Number Plate: <code className="text-primary">KA-01-AB-1234</code><br />
-                            Secret Code: <code className="text-primary">1234</code>
+                            Number Plate: <code className="text-primary">DL-01-AB-1234</code><br />
+                            Secret Code: <code className="text-primary">secret123</code>
                         </p>
                     </div>
 

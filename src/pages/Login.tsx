@@ -37,17 +37,32 @@ const Login = () => {
     setIsLoading(false);
   };
 
-  const handleFaceLogin = async (faceData: string) => {
+  const handleFaceLogin = async (faceData: string, faceDescriptor?: Float32Array) => {
     setIsLoading(true);
     setError('');
 
-    const success = await loginWithFace(faceData);
-    if (success) {
-      navigate('/dashboard');
-    } else {
-      setError('Face not recognized. Please try again or use password login.');
+    try {
+      // Convert Float32Array to regular array for API transmission
+      const descriptorArray = faceDescriptor ? Array.from(faceDescriptor) : undefined;
+
+      if (!descriptorArray || descriptorArray.length !== 128) {
+        setError('Invalid face descriptor. Please try capturing again.');
+        setIsLoading(false);
+        return;
+      }
+
+      const success = await loginWithFace(faceData, faceDescriptor);
+      if (success) {
+        navigate('/dashboard');
+      } else {
+        setError('Face not recognized. Please try again or use password login.');
+      }
+    } catch (err) {
+      console.error('Face login error:', err);
+      setError('Error during face login. Please try again.');
+    } finally {
+      setIsLoading(false);
     }
-    setIsLoading(false);
   };
 
   return (
@@ -64,12 +79,12 @@ const Login = () => {
             initial={{ scale: 0 }}
             animate={{ scale: 1 }}
             transition={{ delay: 0.2, type: 'spring', stiffness: 200 }}
-            className="inline-flex items-center justify-center w-20 h-20 rounded-full bg-secondary border-2 border-primary neon-glow mb-4"
+            className="inline-flex items-center justify-center w-24 h-24 rounded-full bg-secondary overflow-hidden border-2 border-primary neon-glow mb-4"
           >
-            <Car className="w-10 h-10 text-primary" />
+            <img src="/logo.png" alt="Smart Dash Logo" className="w-full h-full object-cover" />
           </motion.div>
           <h1 className="text-3xl font-display font-bold text-foreground neon-text">
-            AutoDash
+            Smart Dash
           </h1>
           <p className="text-muted-foreground mt-2">Step 2: Driver Login</p>
 
@@ -108,8 +123,8 @@ const Login = () => {
             <button
               onClick={() => setAuthMethod('password')}
               className={`flex-1 py-2 px-4 rounded-md text-sm font-medium transition-all ${authMethod === 'password'
-                  ? 'bg-primary text-primary-foreground shadow-sm'
-                  : 'text-muted-foreground hover:text-foreground'
+                ? 'bg-primary text-primary-foreground shadow-sm'
+                : 'text-muted-foreground hover:text-foreground'
                 }`}
             >
               <Lock className="w-4 h-4 inline mr-2" />
@@ -118,8 +133,8 @@ const Login = () => {
             <button
               onClick={() => setAuthMethod('face')}
               className={`flex-1 py-2 px-4 rounded-md text-sm font-medium transition-all ${authMethod === 'face'
-                  ? 'bg-primary text-primary-foreground shadow-sm'
-                  : 'text-muted-foreground hover:text-foreground'
+                ? 'bg-primary text-primary-foreground shadow-sm'
+                : 'text-muted-foreground hover:text-foreground'
                 }`}
             >
               <Scan className="w-4 h-4 inline mr-2" />

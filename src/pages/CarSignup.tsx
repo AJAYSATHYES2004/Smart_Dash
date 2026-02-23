@@ -9,6 +9,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
+import { Label } from '@/components/ui/label';
 import { toast } from 'sonner';
 
 const carSignupSchema = z.object({
@@ -40,26 +41,41 @@ const CarSignup = () => {
         },
     });
 
+    const [rcBookImage, setRcBookImage] = React.useState<string | null>(null);
+
+    const handleRCUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (file) {
+            const reader = new FileReader();
+            reader.onloadend = () => {
+                setRcBookImage(reader.result as string);
+            };
+            reader.readAsDataURL(file);
+        }
+    };
+
     const onSubmit = async (values: z.infer<typeof carSignupSchema>) => {
         try {
             // Massage data to match backend schema
+            // Backend expects { car: {...}, owner: {...}, insurance: {...}, rc_book: {...} }
             const carData = {
-                car_id: values.car_id,
-                number_plate: values.number_plate,
-                secret_code: values.secret_code,
-                owner_details: {
+                car: {
+                    car_id: values.car_id,
+                    number_plate: values.number_plate,
+                    secret_code: values.secret_code,
+                    engine_number: values.engine_number,
+                },
+                owner: {
                     name: values.owner_name,
                     contact: values.owner_contact,
                 },
-                car_details: {
-                    engine_number: values.engine_number,
-                },
-                driving_data: {
-                    petrol: values.initial_petrol,
-                    oil: values.initial_oil,
-                    speed: 0,
-                    kilometers: 0,
-                }
+                // Initial driving data isn't handled by register endpoint yet, considering adding it separately or ignoring for now
+                // driving_data: { ... } 
+
+                rc_book: rcBookImage ? {
+                    image: rcBookImage,
+                    registrationDate: new Date()
+                } : undefined
             };
 
             const success = await registerCar(carData);
@@ -81,8 +97,8 @@ const CarSignup = () => {
 
             <div className="w-full max-w-2xl z-10 relative">
                 <div className="text-center mb-8">
-                    <div className="w-20 h-20 bg-primary/20 rounded-full flex items-center justify-center mx-auto mb-6 backdrop-blur-xl border border-primary/30 shadow-[0_0_30px_rgba(0,255,157,0.3)]">
-                        <Car className="w-10 h-10 text-primary animate-pulse" />
+                    <div className="w-24 h-24 bg-primary/20 rounded-full overflow-hidden flex items-center justify-center mx-auto mb-6 backdrop-blur-xl border border-primary/30 shadow-[0_0_30px_rgba(0,255,157,0.3)]">
+                        <img src="/logo.png" alt="Smart Dash Logo" className="w-full h-full object-cover" />
                     </div>
                     <h1 className="text-4xl font-display font-bold text-foreground tracking-tight mb-2">
                         Register Vehicle
@@ -212,6 +228,34 @@ const CarSignup = () => {
                                 </div>
 
                                 <div className="border-t border-border/50 my-4 pt-4">
+                                    <h3 className="text-sm font-medium mb-4 text-muted-foreground">Documents</h3>
+                                    <div className="space-y-4">
+                                        <div className="flex items-center gap-4">
+                                            <div className="flex-1">
+                                                <Label className="text-foreground text-sm mb-2 block">RC Book Image (Optional)</Label>
+                                                <div className="flex items-center gap-4">
+                                                    <label className="cursor-pointer bg-secondary px-4 py-2 rounded-md border border-border hover:border-primary transition-colors flex items-center gap-2 text-sm text-foreground">
+                                                        <FileText className="w-4 h-4" />
+                                                        Upload RC Book
+                                                        <input type="file" accept="image/*" onChange={handleRCUpload} className="hidden" />
+                                                    </label>
+                                                    {rcBookImage && (
+                                                        <span className="text-primary text-xs flex items-center gap-1">
+                                                            ✓ Uploaded
+                                                        </span>
+                                                    )}
+                                                </div>
+                                            </div>
+                                            {rcBookImage && (
+                                                <div className="w-16 h-16 rounded-md overflow-hidden border border-border">
+                                                    <img src={rcBookImage} alt="RC Book Preview" className="w-full h-full object-cover" />
+                                                </div>
+                                            )}
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div className="border-t border-border/50 my-4 pt-4">
                                     <h3 className="text-sm font-medium mb-4 text-muted-foreground">Initial Diagnostics</h3>
                                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                         <FormField
@@ -255,8 +299,8 @@ const CarSignup = () => {
                         </Link>
                     </CardFooter>
                 </Card>
-            </div>
-        </div>
+            </div >
+        </div >
     );
 };
 

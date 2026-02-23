@@ -78,11 +78,11 @@ const Sidebar: React.FC<SidebarProps> = ({ isMobile, onClose }) => {
       {/* Logo */}
       <div className="p-6 border-b border-sidebar-border">
         <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-full bg-primary/20 border-2 border-primary flex items-center justify-center neon-glow">
-            <Car className="w-5 h-5 text-primary" />
+          <div className="w-10 h-10 rounded-full bg-secondary overflow-hidden flex items-center justify-center neon-glow border border-primary/20">
+            <img src="/logo.png" alt="Smart Dash Logo" className="w-full h-full object-cover" />
           </div>
           <div>
-            <h1 className="font-display font-bold text-lg text-foreground">AutoDash</h1>
+            <h1 className="font-display font-bold text-lg text-foreground">Smart Dash</h1>
             <p className="text-xs text-muted-foreground">Digital Cockpit</p>
           </div>
         </div>

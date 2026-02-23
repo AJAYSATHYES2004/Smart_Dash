@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Test Login</title>
+</head>
+<body>
+    <h1>Digital Drive - Test Login</h1>
+    <button onclick="testLogin()">Test Car Login</button>
+    <pre id="result"></pre>
+    
+    <script>
+        async function testLogin() {
+            const result = document.getElementById('result');
+            result.textContent = 'Testing...';
+            
+            try {
+                const response = await fetch('http://localhost:5000/api/cars/login', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        numberPlate: 'DL-01-AB-1234',
+                        secretCode: 'secret123'
+                    })
+                });
+                
+                const data = await response.json();
+                if (response.ok) {
+                    result.textContent = 'SUCCESS!\n\n' + JSON.stringify(data, null, 2);
+                    result.style.color = 'green';
+                } else {
+                    result.textContent = 'ERROR:\n\n' + JSON.stringify(data, null, 2);
+                    result.style.color = 'red';
+                }
+            } catch (error) {
+                result.textContent = 'FAILED:\n' + error.message;
+                result.style.color = 'red';
+            }
+        }
+    </script>
+</body>
+</html>

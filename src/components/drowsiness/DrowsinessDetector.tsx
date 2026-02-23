@@ -6,23 +6,45 @@ import { Button } from '@/components/ui/button';
 
 interface DrowsinessDetectorProps {
     onDrowsinessDetected: (event: { timestamp: Date; duration: number; severity: string }) => void;
+    onDistractionDetected: (event: { timestamp: Date; duration: number; type: string; severity: string }) => void;
+    engineOn?: boolean;
 }
 
-const DrowsinessDetector: React.FC<DrowsinessDetectorProps> = ({ onDrowsinessDetected }) => {
+const DrowsinessDetector: React.FC<DrowsinessDetectorProps> = ({
+    onDrowsinessDetected,
+    onDistractionDetected,
+    engineOn = false
+}) => {
     const videoRef = useRef<HTMLVideoElement>(null);
     const canvasRef = useRef<HTMLCanvasElement>(null);
     const [isModelLoaded, setIsModelLoaded] = useState(false);
     const [isCameraActive, setIsCameraActive] = useState(false);
     const [error, setError] = useState<string | null>(null);
+
+    // Drowsiness State
     const [isDrowsy, setIsDrowsy] = useState(false);
-    const [eyesClosed, setEyesClosed] = useState(0);
+    const [eyesClosedFrames, setEyesClosedFrames] = useState(0);
     const drowsinessStartRef = useRef<Date | null>(null);
+
+    // Distraction State
+    const [isDistracted, setIsDistracted] = useState(false);
+    const [distractedFrames, setDistractedFrames] = useState(0);
+    const distractionStartRef = useRef<Date | null>(null);
+    const [distractionType, setDistractionType] = useState<string>('');
+
+    // Auto start/stop monitoring based on engine state
+    useEffect(() => {
+        if (!isModelLoaded) return;
+        if (engineOn) startCamera();
+        else stopCamera();
+        return () => stopCamera();
+    }, [engineOn, isModelLoaded]);
 
     // Load face-api models
     useEffect(() => {
         const loadModels = async () => {
             try {
-                const MODEL_URL = '/models'; // Models should be in public/models
+                const MODEL_URL = '/models';
                 await faceapi.nets.tinyFaceDetector.loadFromUri(MODEL_URL);
                 await faceapi.nets.faceLandmark68Net.loadFromUri(MODEL_URL);
                 setIsModelLoaded(true);
@@ -42,8 +64,33 @@ const DrowsinessDetector: React.FC<DrowsinessDetectorProps> = ({ onDrowsinessDet
         return (A + B) / (2.0 * C);
     };
 
+    // Estimate head pose from landmarks
+    // Yaw: Nose relative to horizontal center of eyes
+    // Pitch: Nose relative to vertical center of eyes
+    const estimatePose = (landmarks: faceapi.FaceLandmarks68) => {
+        const nose = landmarks.getNose()[0];
+        const leftEye = landmarks.getLeftEye()[0];
+        const rightEye = landmarks.getRightEye()[3];
+
+        // Horizontal eye distance
+        const eyeDist = Math.hypot(rightEye.x - leftEye.x, rightEye.y - leftEye.y);
+
+        // Midpoint between eyes
+        const eyeMidX = (leftEye.x + rightEye.x) / 2;
+        const eyeMidY = (leftEye.y + rightEye.y) / 2;
+
+        // Relative horizontal displacement (Yaw approximation)
+        const yaw = (nose.x - eyeMidX) / eyeDist;
+
+        // Relative vertical displacement (Pitch approximation)
+        const pitch = (nose.y - eyeMidY) / eyeDist;
+
+        return { yaw, pitch };
+    };
+
     // Start camera
     const startCamera = async () => {
+        if (isCameraActive) return;
         try {
             const stream = await navigator.mediaDevices.getUserMedia({
                 video: { width: 640, height: 480 }
@@ -54,12 +101,11 @@ const DrowsinessDetector: React.FC<DrowsinessDetectorProps> = ({ onDrowsinessDet
                 setError(null);
             }
         } catch (err) {
-            setError('Camera access denied. Please grant camera permissions.');
+            setError('Camera access denied');
             console.error(err);
         }
     };
 
-    // Stop camera
     const stopCamera = () => {
         if (videoRef.current && videoRef.current.srcObject) {
             const stream = videoRef.current.srcObject as MediaStream;
@@ -69,11 +115,11 @@ const DrowsinessDetector: React.FC<DrowsinessDetectorProps> = ({ onDrowsinessDet
         }
     };
 
-    // Detect drowsiness
+    // Dual Detection Loop
     useEffect(() => {
-        if (!isCameraActive || !isModelLoaded) return;
+        if (!isCameraActive || !isModelLoaded || !engineOn) return;
 
-        const detectDrowsiness = async () => {
+        const processFrame = async () => {
             if (videoRef.current && canvasRef.current) {
                 const detections = await faceapi
                     .detectSingleFace(videoRef.current, new faceapi.TinyFaceDetectorOptions())
@@ -81,21 +127,16 @@ const DrowsinessDetector: React.FC<DrowsinessDetectorProps> = ({ onDrowsinessDet
 
                 if (detections) {
                     const landmarks = detections.landmarks;
-                    const leftEye = landmarks.getLeftEye();
-                    const rightEye = landmarks.getRightEye();
 
-                    const leftEAR = calculateEAR(leftEye);
-                    const rightEAR = calculateEAR(rightEye);
+                    // 1. EAR CHECK (Drowsiness)
+                    const leftEAR = calculateEAR(landmarks.getLeftEye());
+                    const rightEAR = calculateEAR(landmarks.getRightEye());
                     const avgEAR = (leftEAR + rightEAR) / 2;
-
-                    // Threshold for closed eyes
-                    const EAR_THRESHOLD = 0.25;
+                    const EAR_THRESHOLD = 0.25; // Reverted to previous value for better accuracy/preference
 
                     if (avgEAR < EAR_THRESHOLD) {
-                        setEyesClosed(prev => prev + 1);
-
-                        // Drowsy if eyes closed for 3+ frames (~100ms)
-                        if (eyesClosed >= 3) {
+                        setEyesClosedFrames(prev => prev + 1);
+                        if (eyesClosedFrames >= 3) { // ~300ms
                             if (!isDrowsy) {
                                 setIsDrowsy(true);
                                 drowsinessStartRef.current = new Date();
@@ -111,9 +152,44 @@ const DrowsinessDetector: React.FC<DrowsinessDetectorProps> = ({ onDrowsinessDet
                                 severity: duration > 2000 ? 'high' : 'medium'
                             });
                         }
-                        setEyesClosed(0);
+                        setEyesClosedFrames(0);
                         setIsDrowsy(false);
                         drowsinessStartRef.current = null;
+                    }
+
+                    // 2. POSE CHECK (Distraction)
+                    const { yaw, pitch } = estimatePose(landmarks);
+                    const YAW_THRESHOLD = 0.45; // Looking aside
+                    const PITCH_THRESHOLD = 0.4; // Looking down
+
+                    let currentDistraction = '';
+                    if (Math.abs(yaw) > YAW_THRESHOLD) currentDistraction = 'Looking Aside';
+                    else if (pitch > PITCH_THRESHOLD) currentDistraction = 'Looking Down';
+
+                    if (currentDistraction) {
+                        setDistractionType(currentDistraction);
+                        setDistractedFrames(prev => prev + 1);
+                        if (distractedFrames >= 5) { // ~500ms
+                            if (!isDistracted) {
+                                setIsDistracted(true);
+                                distractionStartRef.current = new Date();
+                                if (!isDrowsy) playAlert(); // Only play if not already alerting for drowsiness
+                            }
+                        }
+                    } else {
+                        if (isDistracted && distractionStartRef.current) {
+                            const duration = new Date().getTime() - distractionStartRef.current.getTime();
+                            onDistractionDetected({
+                                timestamp: distractionStartRef.current,
+                                duration,
+                                type: distractionType,
+                                severity: duration > 3000 ? 'high' : 'medium'
+                            });
+                        }
+                        setDistractedFrames(0);
+                        setIsDistracted(false);
+                        setDistractionType('');
+                        distractionStartRef.current = null;
                     }
 
                     // Draw landmarks
@@ -130,14 +206,13 @@ const DrowsinessDetector: React.FC<DrowsinessDetectorProps> = ({ onDrowsinessDet
             }
         };
 
-        const interval = setInterval(detectDrowsiness, 100);
+        const interval = setInterval(processFrame, 100);
         return () => clearInterval(interval);
-    }, [isCameraActive, isModelLoaded, eyesClosed, isDrowsy, onDrowsinessDetected]);
+    }, [isCameraActive, isModelLoaded, engineOn, eyesClosedFrames, isDrowsy, distractedFrames, isDistracted, distractionType, onDrowsinessDetected, onDistractionDetected]);
 
     const playAlert = () => {
-        const audio = new Audio('/alert.mp3'); // Add alert sound to public folder
+        const audio = new Audio('/alert.mp3');
         audio.play().catch(() => {
-            // Fallback to beep if audio file not found
             const ctx = new AudioContext();
             const oscillator = ctx.createOscillator();
             oscillator.connect(ctx.destination);
@@ -148,73 +223,66 @@ const DrowsinessDetector: React.FC<DrowsinessDetectorProps> = ({ onDrowsinessDet
     };
 
     return (
-        <Card className={`${isDrowsy ? 'border-red-500 border-4 animate-pulse' : ''}`}>
-            <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                    <Camera className="w-5 h-5" />
-                    Drowsiness Monitor
-                    {isDrowsy && <AlertTriangle className="w-5 h-5 text-red-500 animate-bounce" />}
+        <Card className={`${(isDrowsy || isDistracted) ? 'border-red-500 border-4 animate-pulse' : ''}`}>
+            <CardHeader className="py-3">
+                <CardTitle className="flex items-center justify-between text-sm">
+                    <div className="flex items-center gap-2">
+                        <Camera className="w-4 h-4" />
+                        Safety Monitor
+                    </div>
+                    {engineOn ? (
+                        <span className="text-[10px] flex items-center gap-1 text-green-500 font-bold uppercase tracking-wider">
+                            <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" />
+                            Active
+                        </span>
+                    ) : (
+                        <span className="text-[10px] flex items-center gap-1 text-muted-foreground font-bold uppercase tracking-wider">
+                            <span className="w-1.5 h-1.5 rounded-full bg-muted-foreground" />
+                            Stopped
+                        </span>
+                    )}
                 </CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
-                {error && (
-                    <div className="p-3 bg-destructive/10 border border-destructive rounded-lg text-sm">
-                        {error}
-                    </div>
-                )}
+                {error && <div className="p-3 bg-destructive/10 border border-destructive rounded-lg text-sm">{error}</div>}
+                {!isModelLoaded && <div className="text-sm text-muted-foreground">Loading AI models...</div>}
 
-                {!isModelLoaded && (
-                    <div className="text-sm text-muted-foreground">Loading detection models...</div>
-                )}
-
-                <div className="relative">
-                    <video
-                        ref={videoRef}
-                        autoPlay
-                        muted
-                        width="640"
-                        height="480"
-                        className="rounded-lg bg-black"
-                        style={{ display: isCameraActive ? 'block' : 'none' }}
-                    />
-                    <canvas
-                        ref={canvasRef}
-                        className="absolute top-0 left-0"
-                        style={{ display: isCameraActive ? 'block' : 'none' }}
-                    />
+                <div className="relative aspect-video">
+                    <video ref={videoRef} autoPlay muted width="640" height="480" className="w-full h-full rounded-lg bg-black object-cover" style={{ display: isCameraActive ? 'block' : 'none' }} />
+                    <canvas ref={canvasRef} className="absolute top-0 left-0 w-full h-full" style={{ display: isCameraActive ? 'block' : 'none' }} />
 
                     {!isCameraActive && (
-                        <div className="flex items-center justify-center h-64 bg-secondary rounded-lg">
-                            <CameraOff className="w-12 h-12 text-muted-foreground" />
+                        <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/40 rounded-lg border border-white/5 backdrop-blur-sm">
+                            <CameraOff className="w-12 h-12 text-muted-foreground opacity-50 mb-2" />
+                            <p className="text-xs text-muted-foreground font-medium">{!engineOn ? "Start Engine to Begin" : "Initializing..."}</p>
+                        </div>
+                    )}
+
+                    {(isDrowsy || isDistracted) && (
+                        <div className="absolute top-4 left-4 right-4 p-3 bg-red-500/80 border-2 border-red-500 rounded-lg backdrop-blur-md z-10 animate-pulse shadow-2xl">
+                            <p className="text-white font-black text-center text-xs tracking-widest uppercase">
+                                ⚠️ {isDrowsy ? "DROWSINESS DETECTED" : `DISTRACTION: ${distractionType}`} ⚠️
+                            </p>
                         </div>
                     )}
                 </div>
 
-                {isDrowsy && (
-                    <div className="p-4 bg-red-500/20 border-2 border-red-500 rounded-lg">
-                        <p className="text-red-500 font-bold text-center text-lg">
-                            ⚠️ DROWSINESS DETECTED! STAY ALERT! ⚠️
-                        </p>
+                <div className="grid grid-cols-2 gap-2 mt-2">
+                    <div className={`p-2 rounded border ${isDrowsy ? 'bg-red-500/20 border-red-500' : 'bg-secondary/30 border-border'}`}>
+                        <p className="text-[8px] uppercase tracking-tighter text-muted-foreground">Drowsiness</p>
+                        <p className={`text-[10px] font-bold ${isDrowsy ? 'text-red-500' : 'text-success'}`}>{isDrowsy ? 'ALERT' : 'CLEAR'}</p>
+                    </div>
+                    <div className={`p-2 rounded border ${isDistracted ? 'bg-red-500/20 border-red-500' : 'bg-secondary/30 border-border'}`}>
+                        <p className="text-[8px] uppercase tracking-tighter text-muted-foreground">Distraction</p>
+                        <p className={`text-[10px] font-bold ${isDistracted ? 'text-red-500' : 'text-success'}`}>{isDistracted ? 'ALERT' : 'CLEAR'}</p>
+                    </div>
+                </div>
+
+                {!engineOn && (
+                    <div className="p-3 bg-secondary/50 rounded-lg border border-border">
+                        <p className="text-[10px] text-center text-muted-foreground italic">Automation enabled. Starts with engine.</p>
                     </div>
                 )}
-
-                <div className="flex gap-2">
-                    {!isCameraActive ? (
-                        <Button onClick={startCamera} disabled={!isModelLoaded} className="w-full">
-                            <Camera className="w-4 h-4 mr-2" />
-                            Start Monitoring
-                        </Button>
-                    ) : (
-                        <Button onClick={stopCamera} variant="destructive" className="w-full">
-                            <CameraOff className="w-4 h-4 mr-2" />
-                            Stop Monitoring
-                        </Button>
-                    )}
-                </div>
-
-                <div className="text-xs text-muted-foreground text-center">
-                    Eye Closure Frames: {eyesClosed} / 3
-                </div>
             </CardContent>
         </Card>
     );

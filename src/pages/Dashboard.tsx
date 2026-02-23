@@ -9,7 +9,9 @@ import VehicleControls from '@/components/dashboard/VehicleControls';
 import VehicleStatus from '@/components/dashboard/VehicleStatus';
 import EmergencyAlert from '@/components/dashboard/EmergencyAlert';
 import ZoneAlert from '@/components/dashboard/ZoneAlert';
-import FineDisplay from '@/components/dashboard/FineDisplay';
+import InsuranceWidget from '@/components/dashboard/InsuranceWidget';
+import FineWidget from '@/components/dashboard/FineWidget';
+import StatusLights from '@/components/dashboard/StatusLights';
 import DrowsinessDetector from '@/components/drowsiness/DrowsinessDetector';
 
 const Dashboard = () => {
@@ -39,7 +41,8 @@ const Dashboard = () => {
     dismissEmergencyAlert,
     totalFines,
     resetFines,
-    logDrowsinessEvent
+    logDrowsinessEvent,
+    logDistractionEvent
   } = useDashboard();
 
   // Keyboard controls
@@ -87,14 +90,35 @@ const Dashboard = () => {
         </motion.div>
       )}
 
-      {/* Fine Display */}
-      <motion.div
-        initial={{ opacity: 0, y: -10 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: 0.1 }}
-      >
-        <FineDisplay totalFines={totalFines} onReset={resetFines} />
-      </motion.div>
+      {/* Status Widgets Grid */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+        {/* Insurance Status Widget */}
+        <motion.div
+          initial={{ opacity: 0, x: -10 }}
+          animate={{ opacity: 1, x: 0 }}
+          transition={{ delay: 0.1 }}
+        >
+          <InsuranceWidget />
+        </motion.div>
+
+        {/* Status Lights Widget */}
+        <motion.div
+          initial={{ opacity: 0, y: -10 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.15 }}
+        >
+          <StatusLights />
+        </motion.div>
+
+        {/* Total Fines Widget */}
+        <motion.div
+          initial={{ opacity: 0, x: 10 }}
+          animate={{ opacity: 1, x: 0 }}
+          transition={{ delay: 0.1 }}
+        >
+          <FineWidget />
+        </motion.div>
+      </div>
 
       {/* Main Dashboard Grid */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -171,7 +195,11 @@ const Dashboard = () => {
           className="space-y-6"
         >
           <VehicleStatus {...vehicleStatus} />
-          <DrowsinessDetector onDrowsinessDetected={logDrowsinessEvent} />
+          <DrowsinessDetector
+            onDrowsinessDetected={logDrowsinessEvent}
+            onDistractionDetected={logDistractionEvent}
+            engineOn={engineOn}
+          />
         </motion.div>
       </div>
 

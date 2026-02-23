@@ -8,8 +8,16 @@ const userSchema = new mongoose.Schema({
     dateOfBirth: { type: Date },
     licenseNumber: { type: String },
     profilePhoto: { type: String }, // URL or Base64
-    faceData: { type: String }, // Base64 encoded face descriptor or image for recognition
-    emergencyContact: { type: String },
+    faceData: { type: String }, // Base64 encoded face image for visual reference
+    faceDescriptor: {
+        type: {
+            type: String,
+            enum: ['Float32Array'],
+            default: 'Float32Array'
+        },
+        data: [Number] // 128-element array for face recognition
+    },
+    isFaceRegistered: { type: Boolean, default: false },
     createdAt: { type: Date, default: Date.now }
 });
 

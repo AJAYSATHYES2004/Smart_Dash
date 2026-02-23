@@ -2,10 +2,11 @@ import React, { useRef, useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Camera, Check, X, Loader2, AlertCircle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import * as faceapi from 'face-api.js';
 
 interface FaceRecognitionProps {
     mode: 'login' | 'register';
-    onCapture: (faceData: string) => void;
+    onCapture: (faceData: string, faceDescriptor?: Float32Array) => void;
     onCancel?: () => void;
     isLoading?: boolean;
 }
@@ -23,17 +24,41 @@ const FaceRecognition: React.FC<FaceRecognitionProps> = ({
     const [error, setError] = useState<string>('');
     const [capturing, setCapturing] = useState(false);
     const [countdown, setCountdown] = useState<number | null>(null);
+    const [modelsLoaded, setModelsLoaded] = useState(false);
 
     useEffect(() => {
+        loadModels();
         return () => {
             // Cleanup: stop camera when component unmounts
             if (stream) {
                 stream.getTracks().forEach(track => track.stop());
             }
         };
-    }, [stream]);
+    }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+    const loadModels = async () => {
+        try {
+            const MODEL_URL = 'https://raw.githubusercontent.com/justadudewhohacks/face-api.js/master/weights';
+            await Promise.all([
+                faceapi.nets.tinyFaceDetector.loadFromUri(MODEL_URL),
+                faceapi.nets.faceLandmark68Net.loadFromUri(MODEL_URL),
+                faceapi.nets.faceRecognitionNet.loadFromUri(MODEL_URL)
+            ]);
+            setModelsLoaded(true);
+        } catch (err) {
+            console.error('Failed to load face-api models', err);
+            setError('Failed to load face recognition models. Please check your internet connection.');
+        }
+    };
+
+    useEffect(() => {
+        if (cameraActive && stream && videoRef.current) {
+            videoRef.current.srcObject = stream;
+        }
+    }, [cameraActive, stream]);
 
     const startCamera = async () => {
+        if (!modelsLoaded) return;
         try {
             setError('');
             const mediaStream = await navigator.mediaDevices.getUserMedia({
@@ -44,11 +69,8 @@ const FaceRecognition: React.FC<FaceRecognitionProps> = ({
                 }
             });
 
-            if (videoRef.current) {
-                videoRef.current.srcObject = mediaStream;
-                setStream(mediaStream);
-                setCameraActive(true);
-            }
+            setStream(mediaStream);
+            setCameraActive(true);
         } catch (err) {
             console.error('Camera access error:', err);
             setError('Unable to access camera. Please check permissions and try again.');
@@ -64,7 +86,11 @@ const FaceRecognition: React.FC<FaceRecognitionProps> = ({
     };
 
     const captureImage = () => {
-        if (!videoRef.current || !canvasRef.current) return;
+        console.log('Capture button clicked');
+        if (!videoRef.current || !canvasRef.current) {
+            console.error('Video or canvas ref missing');
+            return;
+        }
 
         setCapturing(true);
         setCountdown(3);
@@ -82,7 +108,8 @@ const FaceRecognition: React.FC<FaceRecognitionProps> = ({
         }, 1000);
     };
 
-    const performCapture = () => {
+    const performCapture = async () => {
+        console.log('Performing capture...');
         if (!videoRef.current || !canvasRef.current) return;
 
         const canvas = canvasRef.current;
@@ -95,13 +122,34 @@ const FaceRecognition: React.FC<FaceRecognitionProps> = ({
         if (ctx) {
             ctx.drawImage(video, 0, 0);
             const imageData = canvas.toDataURL('image/jpeg', 0.8);
+            console.log('Image captured, detecting face...');
 
-            // Stop camera after capture
-            stopCamera();
-            setCapturing(false);
+            // Detect face and get descriptor
+            try {
+                const detection = await faceapi.detectSingleFace(video, new faceapi.TinyFaceDetectorOptions())
+                    .withFaceLandmarks()
+                    .withFaceDescriptor();
 
-            // Pass captured image to parent
-            onCapture(imageData);
+                console.log('Detection result:', detection ? 'Face found' : 'No face');
+
+                if (!detection) {
+                    setError('No face detected. Please try again with better lighting.');
+                    setCapturing(false);
+                    return;
+                }
+
+                // Stop camera after capture
+                stopCamera();
+                setCapturing(false);
+
+                // Pass captured image AND descriptor to parent
+                onCapture(imageData, detection.descriptor);
+
+            } catch (err) {
+                console.error('Face detection error:', err);
+                setError('Error analyzing face. Please try again.');
+                setCapturing(false);
+            }
         }
     };
 
@@ -111,6 +159,15 @@ const FaceRecognition: React.FC<FaceRecognitionProps> = ({
             onCancel();
         }
     };
+
+    if (!modelsLoaded) {
+        return (
+            <div className="flex flex-col items-center justify-center p-8 text-center space-y-4">
+                <Loader2 className="w-8 h-8 text-primary animate-spin" />
+                <p className="text-muted-foreground">Loading AI Models...</p>
+            </div>
+        );
+    }
 
     return (
         <div className="space-y-4">

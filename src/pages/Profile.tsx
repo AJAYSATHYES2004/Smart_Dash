@@ -1,32 +1,36 @@
 import React, { useState } from 'react';
 import { motion } from 'framer-motion';
-import { User, Calendar, CreditCard, Phone, AlertCircle, Mail, Edit2, Save, X } from 'lucide-react';
+import { User, Calendar, CreditCard, Phone, AlertCircle, Mail, Edit2, Save, X, Scan } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { authService } from '@/services/api';
 import { toast } from 'sonner';
+import FaceRecognition from '@/components/auth/FaceRecognition';
 
 const Profile = () => {
   const { user, updateProfile } = useAuth();
   const [isEditing, setIsEditing] = useState(false);
+  const [showFaceRec, setShowFaceRec] = useState(false);
   const [formData, setFormData] = useState({
     name: user?.name || '',
     phone: user?.phone || '',
     licenseNumber: user?.licenseNumber || '',
     emergencyContact: user?.emergencyContact || '',
   });
+  const [profilePhoto, setProfilePhoto] = useState<string | null>(user?.profilePhoto || null);
   const [isSaving, setIsSaving] = useState(false);
+  const fileInputRef = React.useRef<HTMLInputElement>(null);
 
   if (!user) return null;
 
   const handleSave = async () => {
     setIsSaving(true);
     try {
-      // Assuming user has an _id field from MongoDB
       const userId = (user as any)._id || 'temp-id';
-      await authService.updateProfile(userId, formData);
-      updateProfile(formData);
+      const payload = { ...formData, profilePhoto };
+      await authService.updateProfile(userId, payload);
+      updateProfile(payload);
       toast.success('Profile updated successfully!');
       setIsEditing(false);
     } catch (error) {
@@ -34,6 +38,42 @@ const Profile = () => {
       toast.error('Failed to update profile');
     } finally {
       setIsSaving(false);
+    }
+  };
+
+  const handlePhotoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setProfilePhoto(reader.result as string);
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
+  const handleFaceUpdate = async (faceData: string, faceDescriptor?: Float32Array) => {
+    try {
+      const userId = (user as any)._id;
+      if (!userId) {
+        toast.error('User ID not found');
+        return;
+      }
+
+      const payload = {
+        faceData,
+        faceDescriptor: faceDescriptor ? Array.from(faceDescriptor) : undefined
+      };
+
+      await authService.updateProfile(userId, payload);
+      // Update local context
+      updateProfile({ faceData, faceDescriptor: payload.faceDescriptor });
+
+      setShowFaceRec(false);
+      toast.success('Face login updated successfully!');
+    } catch (error) {
+      console.error('Failed to update face:', error);
+      toast.error('Failed to update face login');
     }
   };
 
@@ -110,13 +150,23 @@ const Profile = () => {
         <div className="flex flex-col sm:flex-row items-center gap-6 pb-6 border-b border-border">
           <div className="relative">
             <div className="w-28 h-28 rounded-full bg-secondary border-4 border-primary overflow-hidden flex items-center justify-center neon-glow">
-              {user.profilePhoto ? (
-                <img src={user.profilePhoto} alt="Profile" className="w-full h-full object-cover" />
+              {profilePhoto ? (
+                <img src={profilePhoto} alt="Profile" className="w-full h-full object-cover" />
               ) : (
                 <User className="w-12 h-12 text-muted-foreground" />
               )}
             </div>
-            <button className="absolute bottom-0 right-0 p-2 rounded-full bg-primary text-primary-foreground hover:bg-primary/90 transition-colors">
+            <input
+              type="file"
+              ref={fileInputRef}
+              accept="image/*"
+              onChange={handlePhotoUpload}
+              className="hidden"
+            />
+            <button
+              onClick={() => fileInputRef.current?.click()}
+              className="absolute bottom-0 right-0 p-2 rounded-full bg-primary text-primary-foreground hover:bg-primary/90 transition-colors shadow-lg"
+            >
               <Edit2 className="w-4 h-4" />
             </button>
           </div>
@@ -218,6 +268,53 @@ const Profile = () => {
             </Button>
           )}
         </div>
+      </motion.div>
+
+      {/* Face Login Section */}
+      <motion.div
+        initial={{ opacity: 0, scale: 0.95 }}
+        animate={{ opacity: 1, scale: 1 }}
+        transition={{ delay: 0.2 }}
+        className="mt-6 dashboard-card p-6"
+      >
+        <div className="flex items-center justify-between mb-4">
+          <div>
+            <h3 className="text-lg font-display font-bold text-foreground">Face Login</h3>
+            <p className="text-sm text-muted-foreground">
+              {user.faceData ? 'Face login is enabled' : 'Enable face login for quick access'}
+            </p>
+          </div>
+          {user.faceData && (
+            <span className="bg-success/20 text-success text-xs px-2 py-1 rounded-full font-medium">
+              Enabled
+            </span>
+          )}
+        </div>
+
+        {showFaceRec ? (
+          <div className="bg-background rounded-lg p-4 border border-border">
+            <FaceRecognition
+              onCapture={handleFaceUpdate}
+              mode="register"
+            />
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setShowFaceRec(false)}
+              className="mt-2 w-full text-muted-foreground hover:text-foreground"
+            >
+              Cancel
+            </Button>
+          </div>
+        ) : (
+          <Button
+            onClick={() => setShowFaceRec(true)}
+            className="w-full bg-secondary text-foreground hover:bg-secondary/80 border border-border"
+          >
+            <Scan className="w-4 h-4 mr-2" />
+            {user.faceData ? 'Update Face Model' : 'Setup Face Login'}
+          </Button>
+        )}
       </motion.div>
     </div>
   );

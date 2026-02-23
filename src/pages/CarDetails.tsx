@@ -1,6 +1,6 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { Car, Hash, User, FileImage, Upload } from 'lucide-react';
+import { Car, Hash, User, FileImage, Upload, Edit2, Save, X, AlertCircle } from 'lucide-react';
 import { useDashboard } from '@/contexts/DashboardContext';
 import { useAuth } from '@/contexts/AuthContext';
 import { Input } from '@/components/ui/input';
@@ -10,18 +10,66 @@ import { carService } from '@/services/api';
 import { toast } from 'sonner';
 
 const CarDetails = () => {
-  const { carDetails, updateCarDetails } = useDashboard();
+  const { carDetails, updateCarDetails, vehicleStatus } = useDashboard();
   const { authenticatedCar } = useAuth();
   const [isEditing, setIsEditing] = useState(false);
-  const [formData, setFormData] = useState(carDetails);
+  const [formData, setFormData] = useState<any>({
+    car_details: {
+      engine_number: '',
+      insurance: {
+        policyNumber: '',
+        validity: ''
+      },
+      rc_book: {
+        registrationDate: ''
+      }
+    },
+    owner_details: {
+      name: '',
+      contact: '',
+      proof_image: ''
+    },
+    driving_data: {},
+    fine_details: []
+  });
   const [isSaving, setIsSaving] = useState(false);
+  const [carData, setCarData] = useState<any>(null);
+  const [isLoading, setIsLoading] = useState(true);
+
+  useEffect(() => {
+    fetchCarData();
+  }, [authenticatedCar]);
+
+  const fetchCarData = async () => {
+    try {
+      if (!authenticatedCar?.numberPlate) {
+        setIsLoading(false);
+        return;
+      }
+      setIsLoading(true);
+      const response = await carService.getDetails(authenticatedCar.numberPlate);
+      setCarData(response.data);
+      setFormData(response.data);
+    } catch (error) {
+      console.error('Failed to fetch car data:', error);
+      toast.error('Failed to load car details');
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   const handlePhotoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
       const reader = new FileReader();
       reader.onloadend = () => {
-        setFormData(prev => ({ ...prev, ownerProofImage: reader.result as string }));
+        setFormData((prev: any) => ({
+          ...prev,
+          owner_details: {
+            ...prev.owner_details,
+            proof_image: reader.result as string
+          }
+        }));
       };
       reader.readAsDataURL(file);
     }
@@ -34,15 +82,16 @@ const CarDetails = () => {
     try {
       await carService.updateDetails(authenticatedCar.numberPlate, {
         owner_details: {
-          name: formData.ownerName,
-          contact: formData.ownerContact,
-          proof_image: formData.ownerProofImage
+          name: formData.owner_details?.name || '',
+          contact: formData.owner_details?.contact || '',
+          proof_image: formData.owner_details?.proof_image || ''
         },
         car_details: {
-          engine_number: formData.engineNumber,
+          engine_number: formData.car_details?.engine_number || ''
         }
       });
-      updateCarDetails(formData);
+      // Refresh data to ensure sync
+      await fetchCarData();
       toast.success('Car details updated successfully!');
       setIsEditing(false);
     } catch (error) {
@@ -53,11 +102,12 @@ const CarDetails = () => {
     }
   };
 
-  const InfoRow: React.FC<{ icon: React.ReactNode; label: string; value: string; editable?: boolean; field?: string }> = ({
+  const InfoRow: React.FC<{ icon: React.ReactNode; label: string; value: string; editable?: boolean; section?: string; field?: string }> = ({
     icon,
     label,
     value,
     editable,
+    section,
     field
   }) => (
     <div className="flex items-center gap-4 py-3 border-b border-border last:border-0">
@@ -66,10 +116,16 @@ const CarDetails = () => {
       </div>
       <div className="flex-1">
         <p className="text-xs text-muted-foreground">{label}</p>
-        {isEditing && editable && field ? (
+        {isEditing && editable && section && field ? (
           <Input
-            value={(formData as any)[field]}
-            onChange={(e) => setFormData(prev => ({ ...prev, [field]: e.target.value }))}
+            value={(formData as any)?.[section]?.[field] || ''}
+            onChange={(e) => setFormData((prev: any) => ({
+              ...prev,
+              [section]: {
+                ...prev[section],
+                [field]: e.target.value
+              }
+            }))}
             className="mt-1 bg-secondary border-border h-8"
           />
         ) : (
@@ -112,34 +168,69 @@ const CarDetails = () => {
           <InfoRow
             icon={<Hash className="w-5 h-5" />}
             label="Engine Number"
-            value={carDetails.engineNumber}
+            value={carData?.car_details?.engine_number || carDetails.engineNumber || 'N/A'}
             editable
-            field="engineNumber"
+            section="car_details"
+            field="engine_number"
           />
           <InfoRow
             icon={<Car className="w-5 h-5" />}
-            label="Car ID"
-            value={carDetails.carId}
-            editable
-            field="carId"
+            label="Number Plate"
+            value={carData?.number_plate || carDetails.carId || 'N/A'}
           />
           <InfoRow
             icon={<User className="w-5 h-5" />}
             label="Owner Name"
-            value={carDetails.ownerName}
+            value={carData?.owner_details?.name || carDetails.ownerName || 'N/A'}
             editable
-            field="ownerName"
+            section="owner_details"
+            field="name"
+          />
+          <InfoRow
+            icon={<User className="w-5 h-5" />}
+            label="Owner Contact"
+            value={carData?.owner_details?.contact || carDetails.ownerContact || 'N/A'}
+            editable
+            section="owner_details"
+            field="contact"
           />
         </div>
+
+        {/* Vehicle Status */}
+        {carData?.driving_data && (
+          <div className="mt-6">
+            <h3 className="text-sm font-display text-muted-foreground mb-4">VEHICLE STATUS</h3>
+            <InfoRow
+              icon={<Car className="w-5 h-5" />}
+              label="Fuel Level"
+              value={`${carData.driving_data.petrol || 0}%`}
+            />
+            <InfoRow
+              icon={<Car className="w-5 h-5" />}
+              label="Oil Level"
+              value={`${carData.driving_data.oil || 0}%`}
+            />
+            <InfoRow
+              icon={<Car className="w-5 h-5" />}
+              label="Engine Temp"
+              value={`${carData.driving_data.engineTemp || 90}°C`}
+            />
+            <InfoRow
+              icon={<Car className="w-5 h-5" />}
+              label="Odometer"
+              value={`${(carData.driving_data.kilometers || 0).toLocaleString()} km`}
+            />
+          </div>
+        )}
 
         {/* Owner Proof */}
         <div className="mt-6">
           <h3 className="text-sm font-display text-muted-foreground mb-4">OWNER PROOF</h3>
 
-          {carDetails.ownerProofImage || formData.ownerProofImage ? (
+          {carData?.owner_details?.proof_image || formData.owner_details?.proof_image ? (
             <div className="relative rounded-lg overflow-hidden border border-border">
               <img
-                src={formData.ownerProofImage || carDetails.ownerProofImage || ''}
+                src={formData.owner_details?.proof_image || carData?.owner_details?.proof_image || ''}
                 alt="Owner Proof"
                 className="w-full h-48 object-cover"
               />

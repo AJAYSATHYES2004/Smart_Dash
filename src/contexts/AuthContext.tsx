@@ -10,6 +10,12 @@ export interface UserProfile {
   profilePhoto: string | null;
   emergencyContact: string;
   faceData: string | null; // Base64 encoded face image
+  faceDescriptor?: number[]; // Array of 128 floats
+  insuranceDetails?: {
+    provider: string;
+    policyNumber: string;
+    validity: Date;
+  };
 }
 
 export interface CarDetails {
@@ -37,10 +43,18 @@ interface AuthContextType {
   isAuthenticated: boolean;
   user: UserProfile | null;
   login: (email: string, password: string) => Promise<boolean>;
-  loginWithFace: (faceData: string) => Promise<boolean>;
-  signup: (userData: Omit<UserProfile, 'emergencyContact' | 'faceData'> & { password: string }) => Promise<boolean>;
-  registerFace: (faceData: string) => void;
-  logout: () => void;
+  loginWithFace: (faceData: string, faceDescriptor?: Float32Array) => Promise<boolean>;
+  signup: (userData: Omit<UserProfile, 'emergencyContact' | 'faceData'> & {
+    password: string;
+    faceDescriptor?: Float32Array;
+    insuranceDetails?: {
+      provider: string;
+      policyNumber: string;
+      validity: string;
+    };
+  }) => Promise<{ success: boolean, message?: string }>;
+  registerFace: (faceData: string, faceDescriptor?: Float32Array) => void;
+  logout: () => void; // ... existing properties
   updateProfile: (data: Partial<UserProfile>) => void;
   registerCar: (carData: any) => Promise<boolean>;
 }
@@ -93,17 +107,46 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
   const loginCar = async (numberPlate: string, secretCode: string): Promise<boolean> => {
     try {
+      console.log('Attempting login with:', { numberPlate, secretCode });
       const response = await carService.login({ numberPlate, secretCode });
-      if (response.data) {
+      console.log('Login response:', response);
+
+      // axios successful response
+      if (response && response.data) {
         setIsCarAuthenticated(true);
-        // Map backend response to context shape if needed, or adjust interface
-        // For now, assuming direct mapping or close enough
-        setAuthenticatedCar(response.data);
+        // Transform backend response to match CarDetails interface
+        const backendData = response.data;
+        console.log('Backend data:', backendData);
+
+        const carDetails: CarDetails = {
+          carId: backendData.car_id,
+          numberPlate: backendData.number_plate,
+          ownerName: backendData.owner_details?.name || '',
+          ownerContact: backendData.owner_details?.contact || '',
+          ownerProofImage: backendData.owner_details?.proof_image,
+          engineNumber: backendData.car_details?.engine_number,
+          insurance: backendData.car_details?.insurance?._id || '',
+          rcBook: backendData.car_details?.rc_book?._id || '',
+          policyNumber: backendData.car_details?.insurance?.policyNumber || '',
+          insuranceValidity: backendData.car_details?.insurance?.validity || '',
+          registrationDate: backendData.car_details?.rc_book?.registrationDate || '',
+        };
+        console.log('Transformed car details:', carDetails);
+        setAuthenticatedCar(carDetails);
         return true;
       }
+      console.log('No data in response');
       return false;
-    } catch (error) {
-      console.error('Car login failed:', error);
+    } catch (error: any) {
+      console.error('Car login error caught:', error);
+      if (error.response) {
+        console.error('Response status:', error.response.status);
+        console.error('Response data:', error.response.data);
+      } else if (error.request) {
+        console.error('No response received:', error.request);
+      } else {
+        console.error('Error:', error.message);
+      }
       return false;
     }
   };
@@ -130,14 +173,28 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     }
   };
 
-  const loginWithFace = async (faceData: string): Promise<boolean> => {
+  const loginWithFace = async (faceData: string, faceDescriptor?: Float32Array): Promise<boolean> => {
     try {
-      // Backend handles sending the face data to verify.
-      // For now we assume verify means "find user with this face"
-      const response = await authService.loginFace(faceData);
+      // Ensure descriptor is an array for API transmission
+      const descriptorArray = faceDescriptor ? Array.from(faceDescriptor) : undefined;
+
+      if (!descriptorArray || descriptorArray.length !== 128) {
+        console.error('Invalid face descriptor length:', descriptorArray?.length);
+        return false;
+      }
+
+      const payload = {
+        faceData,
+        faceDescriptor: descriptorArray
+      };
+
+      console.log('Attempting face login with descriptor length:', descriptorArray.length);
+
+      const response = await authService.loginFace(payload);
       if (response.data && response.data.user) {
         setIsAuthenticated(true);
         setUser(response.data.user);
+        console.log('Face login successful for user:', response.data.user.email);
         return true;
       }
       return false;
@@ -147,28 +204,47 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     }
   };
 
-  const signup = async (userData: Omit<UserProfile, 'emergencyContact' | 'faceData'> & { password: string }): Promise<boolean> => {
+  const signup = async (userData: Omit<UserProfile, 'emergencyContact' | 'faceData'> & { password: string, faceDescriptor?: Float32Array }): Promise<{ success: boolean, message?: string }> => {
     try {
+      // Convert Float32Array to regular array for transmission
+      let descriptorArray = undefined;
+      if (userData.faceDescriptor) {
+        descriptorArray = Array.from(userData.faceDescriptor);
+        if (descriptorArray.length !== 128) {
+          console.warn('Face descriptor has unexpected length:', descriptorArray.length);
+        }
+      }
+
       // Map frontend user data to backend expected format
-      // Note: Backend expects 'phone' and 'licenseNumber' etc.
-      const response = await authService.register(userData);
+      const payload = {
+        ...userData,
+        faceDescriptor: descriptorArray
+      };
+
+      console.log('Registering user with face descriptor:', descriptorArray ? descriptorArray.length : 'none');
+
+      const response = await authService.register(payload);
       if (response.data && response.data.user) {
         setIsAuthenticated(true);
         setUser(response.data.user);
-        return true;
+        console.log('User registered successfully with face:', response.data.faceRegistered);
+        return { success: true };
       }
-      return false;
-    } catch (error) {
+      return { success: false, message: 'Registration failed' };
+    } catch (error: any) {
       console.error('Signup failed:', error);
-      return false;
+      const msg = error.response?.data?.msg || 'Registration failed. Please try again.';
+      return { success: false, message: msg };
     }
   };
 
-  const registerFace = (faceData: string) => {
+  const registerFace = (faceData: string, faceDescriptor?: Float32Array) => {
     if (user) {
       // In a real app we'd call an API to update the user profile
-      setUser({ ...user, faceData });
-      // TODO: Call API to update face data
+      // setUser({ ...user, faceData });
+      // For now, this is just a local state update helper if subsequent logic needs it, 
+      // but usually face is registered during signup or a specific profile update flow.
+      console.log("Face registered locally for session", faceDescriptor);
     }
   };
 
@@ -189,9 +265,25 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     try {
       const response = await carService.register(carData);
       if (response.data) {
-        // Optionally auto-login
         setIsCarAuthenticated(true);
-        setAuthenticatedCar(response.data);
+
+        // Transform backend response to match CarDetails interface
+        const backendData = response.data;
+        const carDetails: CarDetails = {
+          carId: backendData.car_id,
+          numberPlate: backendData.number_plate,
+          ownerName: backendData.owner_details?.name || '',
+          ownerContact: backendData.owner_details?.contact || '',
+          ownerProofImage: backendData.owner_details?.proof_image,
+          engineNumber: backendData.car_details?.engine_number,
+          insurance: backendData.car_details?.insurance?._id || '',
+          rcBook: backendData.car_details?.rc_book?._id || '',
+          policyNumber: backendData.car_details?.insurance?.policyNumber || '',
+          insuranceValidity: backendData.car_details?.insurance?.validity || '',
+          registrationDate: backendData.car_details?.rc_book?.registrationDate || '',
+        };
+
+        setAuthenticatedCar(carDetails);
         return true;
       }
       return false;

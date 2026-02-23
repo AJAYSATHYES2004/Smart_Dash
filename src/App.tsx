@@ -18,6 +18,7 @@ import Profile from "./pages/Profile";
 import CarDetails from "./pages/CarDetails";
 import Insurance from "./pages/Insurance";
 import RCBook from "./pages/RCBook";
+import Fines from "./pages/Fines";
 import DrowsinessMonitor from "./pages/DrowsinessMonitor";
 import NotFound from "./pages/NotFound";
 
@@ -115,6 +116,7 @@ const AppRoutes = () => {
         <Route path="/insurance" element={<Insurance />} />
         <Route path="/rc-book" element={<RCBook />} />
         <Route path="/drowsiness-monitor" element={<DrowsinessMonitor />} />
+        <Route path="/fines" element={<Fines />} />
       </Route>
 
       {/* 404 */}

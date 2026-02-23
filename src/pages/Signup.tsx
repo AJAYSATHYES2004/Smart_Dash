@@ -1,12 +1,11 @@
 import React, { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { User, Calendar, CreditCard, Phone, Lock, Eye, EyeOff, Camera, Car, Scan } from 'lucide-react';
+import { User, Calendar, CreditCard, Phone, Lock, Eye, EyeOff, Camera, Car, Shield, FileText } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import FaceRecognition from '@/components/auth/FaceRecognition';
 
 const Signup = () => {
   const navigate = useNavigate();
@@ -18,10 +17,11 @@ const Signup = () => {
     phone: '',
     email: '',
     password: '',
+    insuranceProvider: '',
+    policyNumber: '',
+    policyValidity: '',
   });
   const [profilePhoto, setProfilePhoto] = useState<string | null>(null);
-  const [faceData, setFaceData] = useState<string | null>(null);
-  const [showFaceRegistration, setShowFaceRegistration] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
@@ -47,28 +47,31 @@ const Signup = () => {
     setIsLoading(true);
     setError('');
 
-    const success = await signup({
+    console.log('Submitting Signup Form:', {
+      ...formData
+    });
+
+    const result = await signup({
       ...formData,
       profilePhoto,
       password: formData.password,
+      insuranceDetails: (formData as any).insuranceProvider ? {
+        provider: (formData as any).insuranceProvider,
+        policyNumber: (formData as any).policyNumber,
+        validity: (formData as any).policyValidity
+      } : undefined
     });
 
-    if (success) {
-      // Register face if captured
-      if (faceData) {
-        registerFace(faceData);
-      }
+    if (result.success) {
+      // Register face if captured - already handled in signup if passed
       navigate('/dashboard');
     } else {
-      setError('Registration failed. Please try again.');
+      setError(result.message || 'Registration failed. Please try again.');
     }
     setIsLoading(false);
   };
 
-  const handleFaceCapture = (capturedFaceData: string) => {
-    setFaceData(capturedFaceData);
-    setShowFaceRegistration(false);
-  };
+
 
   const updateField = (field: string) => (e: React.ChangeEvent<HTMLInputElement>) => {
     setFormData(prev => ({ ...prev, [field]: e.target.value }));
@@ -88,9 +91,9 @@ const Signup = () => {
             initial={{ scale: 0 }}
             animate={{ scale: 1 }}
             transition={{ delay: 0.2, type: 'spring', stiffness: 200 }}
-            className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-secondary border-2 border-primary neon-glow mb-3"
+            className="inline-flex items-center justify-center w-20 h-20 rounded-full bg-secondary overflow-hidden border-2 border-primary neon-glow mb-3"
           >
-            <Car className="w-8 h-8 text-primary" />
+            <img src="/logo.png" alt="Smart Dash Logo" className="w-full h-full object-cover" />
           </motion.div>
           <h1 className="text-2xl font-display font-bold text-foreground neon-text">
             Create Account
@@ -239,6 +242,7 @@ const Signup = () => {
                   value={formData.password}
                   onChange={updateField('password')}
                   className="pl-9 pr-9 bg-secondary border-border focus:border-primary h-9"
+                  required
                 />
                 <button
                   type="button"
@@ -250,52 +254,59 @@ const Signup = () => {
               </div>
             </div>
 
-            {/* Face Registration (Optional) */}
-            <div className="space-y-2 pt-2 border-t border-border">
-              <div className="flex items-center justify-between">
-                <Label className="text-foreground text-sm">Face Recognition (Optional)</Label>
-                {faceData && (
-                  <span className="text-xs text-primary flex items-center gap-1">
-                    <Scan className="w-3 h-3" />
-                    Registered
-                  </span>
-                )}
+            {/* Insurance Details */}
+            <div className="space-y-4 pt-4 border-t border-border">
+              <h3 className="text-sm font-medium text-foreground">Insurance Details</h3>
+
+              <div className="space-y-1">
+                <Label htmlFor="insuranceProvider" className="text-foreground text-sm">Provider Name</Label>
+                <div className="relative">
+                  <Shield className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                  <Input
+                    id="insuranceProvider"
+                    placeholder="e.g. LIC, Bajaj Allianz"
+                    value={(formData as any).insuranceProvider}
+                    onChange={updateField('insuranceProvider')}
+                    className="pl-9 bg-secondary border-border focus:border-primary h-9"
+                    required
+                  />
+                </div>
               </div>
 
-              {!showFaceRegistration && !faceData && (
-                <Button
-                  type="button"
-                  onClick={() => setShowFaceRegistration(true)}
-                  variant="outline"
-                  className="w-full border-border hover:bg-secondary"
-                >
-                  <Scan className="w-4 h-4 mr-2" />
-                  Register Face for Quick Login
-                </Button>
-              )}
-
-              {showFaceRegistration && (
-                <motion.div
-                  initial={{ opacity: 0, height: 0 }}
-                  animate={{ opacity: 1, height: 'auto' }}
-                  exit={{ opacity: 0, height: 0 }}
-                >
-                  <FaceRecognition
-                    mode="register"
-                    onCapture={handleFaceCapture}
-                    onCancel={() => setShowFaceRegistration(false)}
-                  />
-                </motion.div>
-              )}
-
-              {faceData && !showFaceRegistration && (
-                <div className="p-3 rounded-lg bg-primary/10 border border-primary">
-                  <p className="text-xs text-foreground">
-                    ✓ Face registered successfully! You can use face recognition to login.
-                  </p>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-1">
+                  <Label htmlFor="policyNumber" className="text-foreground text-sm">Policy Number</Label>
+                  <div className="relative">
+                    <FileText className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                    <Input
+                      id="policyNumber"
+                      placeholder="Policy No."
+                      value={(formData as any).policyNumber}
+                      onChange={updateField('policyNumber')}
+                      className="pl-9 bg-secondary border-border focus:border-primary h-9"
+                      required
+                    />
+                  </div>
                 </div>
-              )}
+
+                <div className="space-y-1">
+                  <Label htmlFor="policyValidity" className="text-foreground text-sm">Validity Date</Label>
+                  <div className="relative">
+                    <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                    <Input
+                      id="policyValidity"
+                      type="date"
+                      value={(formData as any).policyValidity}
+                      onChange={updateField('policyValidity')}
+                      className="pl-9 bg-secondary border-border focus:border-primary h-9"
+                      required
+                    />
+                  </div>
+                </div>
+              </div>
             </div>
+
+
 
             {error && (
               <motion.p

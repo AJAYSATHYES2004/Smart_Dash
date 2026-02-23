@@ -1,0 +1,4 @@
+SRV: ac-vsa6eyf-shard-00-01.lrjaeta.mongodb.net:27017
+SRV: ac-vsa6eyf-shard-00-00.lrjaeta.mongodb.net:27017
+SRV: ac-vsa6eyf-shard-00-02.lrjaeta.mongodb.net:27017
+TXT: [["authSource=admin&replicaSet=atlas-13j7ue-shard-0"]]

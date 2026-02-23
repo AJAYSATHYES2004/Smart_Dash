@@ -19,7 +19,7 @@ const DashboardLayout: React.FC = () => {
       {/* Mobile Header */}
       <div className="lg:hidden fixed top-0 left-0 right-0 z-40 bg-sidebar border-b border-sidebar-border px-4 py-3">
         <div className="flex items-center justify-between">
-          <h1 className="font-display font-bold text-lg text-primary">AutoDash</h1>
+          <h1 className="font-display font-bold text-lg text-primary">Smart Dash</h1>
           <button
             onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
             className="p-2 text-foreground hover:bg-secondary rounded-lg"

@@ -19,9 +19,9 @@ const api = axios.create({
 // });
 
 export const authService = {
-    register: (userData: any) => api.post('/auth/register', userData),
+    register: (userData: any) => api.post('/auth/signup', userData),
     login: (credentials: any) => api.post('/auth/login', credentials),
-    loginFace: (faceData: string) => api.post('/auth/login-face', { faceData }),
+    loginFace: (data: { faceData: string; faceDescriptor?: number[] }) => api.post('/auth/login/face', data),
     updateProfile: (userId: string, data: any) => api.put(`/auth/update/${userId}`, data),
 };
 
@@ -33,6 +33,7 @@ export const carService = {
     updateData: (plate: string, data: any) => api.post(`/cars/${plate}/update`, data),
     updateDetails: (plate: string, data: any) => api.put(`/cars/${plate}/details`, data),
     uploadDocuments: (plate: string, docs: any) => api.post(`/cars/${plate}/documents`, docs),
+    payFine: (plate: string, fineId: string) => api.post(`/cars/${plate}/fine/${fineId}/pay`, {}),
 };
 
 export default api;

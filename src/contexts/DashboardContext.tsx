@@ -2,6 +2,7 @@ import React, { createContext, useContext, useState, useCallback, ReactNode, use
 import { carService } from '@/services/api';
 import { useAuth } from './AuthContext';
 import { audioEngine } from '@/utils/AudioEngine';
+import { toast } from 'sonner';
 
 type Zone = 'normal' | 'school' | 'hospital' | 'traffic';
 
@@ -13,7 +14,7 @@ interface ZoneConfig {
 }
 
 const ZONE_CONFIGS: Record<Zone, ZoneConfig> = {
-  normal: { name: 'Normal Zone', maxSpeed: null, maxVolume: null, alert: '' },
+  normal: { name: 'Normal Zone', maxSpeed: 150, maxVolume: null, alert: 'Speed Limit 150 km/h' },
   school: { name: 'School Zone', maxSpeed: 30, maxVolume: null, alert: 'School Zone – Speed limited to 30 km/h' },
   hospital: { name: 'Hospital Zone', maxSpeed: 30, maxVolume: 40, alert: 'Hospital Zone – Speed & Volume Restricted' },
   traffic: { name: 'Traffic Zone', maxSpeed: null, maxVolume: null, alert: 'Traffic Ahead – Take diversion to best route' },
@@ -30,6 +31,7 @@ interface CarDetails {
   engineNumber: string;
   carId: string;
   ownerName: string;
+  ownerContact: string;
   ownerProofImage: string | null;
   policyNumber: string;
   insuranceValidity: string;
@@ -85,11 +87,19 @@ interface DashboardContextType {
 
   // Fines
   totalFines: number;
+  unpaidFines: any[];
   resetFines: () => void;
 
   // Drowsiness Detection
   drowsinessEvents: Array<{ timestamp: Date; duration: number; severity: string }>;
   logDrowsinessEvent: (event: { timestamp: Date; duration: number; severity: string }) => void;
+
+  // Distraction Detection
+  distractionEvents: Array<{ timestamp: Date; duration: number; type: string; severity: string }>;
+  logDistractionEvent: (event: { timestamp: Date; duration: number; type: string; severity: string }) => void;
+
+  // Security
+  isStolen: boolean;
 }
 
 const DashboardContext = createContext<DashboardContextType | undefined>(undefined);
@@ -121,9 +131,13 @@ export const DashboardProvider: React.FC<{ children: ReactNode }> = ({ children 
 
   // Fines
   const [totalFines, setTotalFines] = useState(0);
+  const [unpaidFines, setUnpaidFines] = useState<any[]>([]);
 
   // Drowsiness Events
   const [drowsinessEvents, setDrowsinessEvents] = useState<Array<{ timestamp: Date; duration: number; severity: string }>>([]);
+
+  // Distraction Events
+  const [distractionEvents, setDistractionEvents] = useState<Array<{ timestamp: Date; duration: number; type: string; severity: string }>>([]);
 
   // Vehicle Status
   const [vehicleStatus] = useState<VehicleStatus>({
@@ -133,6 +147,9 @@ export const DashboardProvider: React.FC<{ children: ReactNode }> = ({ children 
     engineTemp: 90,
   });
 
+  // Security
+  const [isStolen] = useState(false);
+
   // Car Details - Initialize from authenticated car or use defaults
   const [carDetails, setCarDetails] = useState<CarDetails>(() => {
     if (authenticatedCar) {
@@ -140,6 +157,7 @@ export const DashboardProvider: React.FC<{ children: ReactNode }> = ({ children 
         engineNumber: authenticatedCar.engineNumber,
         carId: authenticatedCar.carId,
         ownerName: authenticatedCar.ownerName,
+        ownerContact: authenticatedCar.ownerContact || '',
         ownerProofImage: null,
         policyNumber: authenticatedCar.policyNumber,
         insuranceValidity: authenticatedCar.insuranceValidity,
@@ -151,6 +169,7 @@ export const DashboardProvider: React.FC<{ children: ReactNode }> = ({ children 
       engineNumber: 'ENG-2024-A7X9K2M',
       carId: 'CAR-78542-XYZ',
       ownerName: 'Alex Johnson',
+      ownerContact: '+91 98765 43210',
       ownerProofImage: null,
       policyNumber: 'INS-2024-456789',
       insuranceValidity: '2025-12-31',
@@ -168,6 +187,7 @@ export const DashboardProvider: React.FC<{ children: ReactNode }> = ({ children 
         engineNumber: authenticatedCar.engineNumber,
         carId: authenticatedCar.carId,
         ownerName: authenticatedCar.ownerName,
+        ownerContact: authenticatedCar.ownerContact || '',
         ownerProofImage: null,
         policyNumber: authenticatedCar.policyNumber,
         insuranceValidity: authenticatedCar.insuranceValidity,
@@ -177,9 +197,49 @@ export const DashboardProvider: React.FC<{ children: ReactNode }> = ({ children 
 
       // Fetch latest driving data from backend
       carService.getDetails(authenticatedCar.numberPlate).then(res => {
-        if (res.data && res.data.driving_data) {
-          // Update local state with backed data if implemented
-          // For now we just log, or we could setVehicleStatus if we added a setter
+        if (res.data) {
+          const serverData = res.data;
+
+          setCarDetails(prev => ({
+            ...prev,
+            engineNumber: serverData.car_details?.engine_number || prev.engineNumber,
+            ownerName: serverData.owner_details?.name || prev.ownerName,
+            ownerContact: serverData.owner_details?.contact || prev.ownerContact,
+            // Map Insurance
+            policyNumber: serverData.car_details?.insurance?.policyNumber || prev.policyNumber,
+            insuranceValidity: serverData.car_details?.insurance?.validity || prev.insuranceValidity,
+            // Map RC Book
+            registrationDate: serverData.car_details?.rc_book?.registrationDate || prev.registrationDate,
+          }));
+
+          // Also update fines
+          if (serverData.fine_details) {
+            const unpaid = serverData.fine_details.filter((f: any) => f.status !== 'paid');
+            setUnpaidFines(unpaid);
+            const total = unpaid.reduce((sum: number, fine: any) => sum + (fine.amount || 0), 0);
+            setTotalFines(total);
+          }
+
+          // Sync Drowsiness Events
+          if (serverData.safety_logs?.drowsiness_events) {
+            setDrowsinessEvents(serverData.safety_logs.drowsiness_events.map((e: any) => ({
+              ...e,
+              timestamp: new Date(e.timestamp)
+            })));
+          }
+
+          // Sync Distraction Events
+          if (serverData.safety_logs?.distraction_events) {
+            setDistractionEvents(serverData.safety_logs.distraction_events.map((e: any) => ({
+              ...e,
+              timestamp: new Date(e.timestamp)
+            })));
+          }
+
+          // Also update vehicle status if needed
+          if (serverData.driving_data) {
+            // We could update vehicleStatus here if we had a setter exposed or merged it.
+          }
         }
       }).catch(err => console.error("Failed to sync car data", err));
     }
@@ -194,7 +254,8 @@ export const DashboardProvider: React.FC<{ children: ReactNode }> = ({ children 
             speed,
             petrol: vehicleStatus.petrolLevel,
             oil: vehicleStatus.oilLevel,
-            kilometers: vehicleStatus.totalKm
+            kilometers: vehicleStatus.totalKm,
+            engineTemp: vehicleStatus.engineTemp
           }
         }).catch(e => console.error("Sync error", e));
       }, 5000); // Sync every 5 seconds
@@ -208,19 +269,36 @@ export const DashboardProvider: React.FC<{ children: ReactNode }> = ({ children 
       const overspeed = speed - zoneConfig.maxSpeed;
       // Calculate fine: ₹100 per km/h over the limit
       const fineAmount = overspeed * 100;
-      setTotalFines(prev => prev + fineAmount);
       setSpeedState(zoneConfig.maxSpeed);
       setZoneAlert(zoneConfig.alert);
       audioEngine.speak(`Warning! You are in a ${zoneConfig.name}. Speed restricted to ${zoneConfig.maxSpeed} kilometers per hour.`);
 
-      if (authenticatedCar) {
-        carService.addFine(authenticatedCar.numberPlate, {
+      // Debounce Fine Generation: Only add fine if 60 seconds have passed since last fine
+      const now = Date.now();
+      const lastFineTime = Number(sessionStorage.getItem('lastFineTime') || 0);
+
+      if (now - lastFineTime > 60000 && authenticatedCar) {
+        const validityDate = new Date();
+        validityDate.setDate(validityDate.getDate() + 30); // 30 days validity
+
+        const newFine = {
           amount: fineAmount,
-          reason: `Overspeeding in ${zoneConfig.name}`,
+          type: 'Overspeeding',
+          description: `Overspeeding in ${zoneConfig.name}`,
+          location: zoneConfig.name,
+          reference_id: `FINE-${Date.now()}`,
           date: new Date(),
-          time: new Date().toLocaleTimeString(),
-          last_date: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000) // 7 days later
-        }).catch(err => console.error("Fine sync error", err));
+          last_date: validityDate,
+          status: 'unpaid'
+        };
+
+        setTotalFines(prev => prev + fineAmount);
+        setUnpaidFines(prev => [...prev, newFine]);
+        sessionStorage.setItem('lastFineTime', String(now));
+
+        carService.addFine(authenticatedCar.numberPlate, newFine).catch(err => console.error("Fine sync error", err));
+
+        toast.error(`Fine of ₹${fineAmount} added for overspeeding!`);
       }
     }
     if (zoneConfig.maxVolume && volume > zoneConfig.maxVolume) {
@@ -233,11 +311,12 @@ export const DashboardProvider: React.FC<{ children: ReactNode }> = ({ children 
 
   const setSpeed = useCallback((newSpeed: number) => {
     if (!engineOn) return;
-    const maxAllowed = zoneConfig.maxSpeed || 240;
-    const clampedSpeed = Math.max(0, Math.min(newSpeed, maxAllowed));
+    // Physical limit of the car is 240, regardless of zone limit
+    const physicalLimit = 240;
+    const clampedSpeed = Math.max(0, Math.min(newSpeed, physicalLimit));
     setSpeedState(clampedSpeed);
     audioEngine.setSpeed(clampedSpeed);
-  }, [engineOn, zoneConfig.maxSpeed]);
+  }, [engineOn]);
 
   const increaseSpeed = useCallback(() => {
     if (!engineOn) return;
@@ -261,9 +340,21 @@ export const DashboardProvider: React.FC<{ children: ReactNode }> = ({ children 
       setEngineOn(false);
       setSpeedState(0);
       audioEngine.stop();
+      // Sync monitor status to backend
+      if (authenticatedCar) {
+        carService.updateData(authenticatedCar.numberPlate, {
+          safety_logs: { monitor_active: false }
+        }).catch(err => console.error("Failed to sync monitor status", err));
+      }
     } else {
       setEngineOn(true);
       await audioEngine.start();
+      // Sync monitor status to backend
+      if (authenticatedCar) {
+        carService.updateData(authenticatedCar.numberPlate, {
+          safety_logs: { monitor_active: true }
+        }).catch(err => console.error("Failed to sync monitor status", err));
+      }
     }
   }, [engineOn]);
 
@@ -330,6 +421,23 @@ export const DashboardProvider: React.FC<{ children: ReactNode }> = ({ children 
     }
   }, [authenticatedCar]);
 
+  const logDistractionEvent = useCallback((event: { timestamp: Date; duration: number; type: string; severity: string }) => {
+    setDistractionEvents(prev => [...prev, event]);
+
+    if (authenticatedCar) {
+      carService.updateData(authenticatedCar.numberPlate, {
+        safety_logs: {
+          distraction_events: [{
+            timestamp: event.timestamp,
+            duration: event.duration,
+            type: event.type,
+            severity: event.severity
+          }]
+        }
+      }).catch(err => console.error("Failed to log distraction event", err));
+    }
+  }, [authenticatedCar]);
+
   return (
     <DashboardContext.Provider value={{
       speed,
@@ -362,9 +470,13 @@ export const DashboardProvider: React.FC<{ children: ReactNode }> = ({ children 
       showEmergencyAlert,
       dismissEmergencyAlert,
       totalFines,
+      unpaidFines,
       resetFines,
       drowsinessEvents,
       logDrowsinessEvent,
+      distractionEvents,
+      logDistractionEvent,
+      isStolen,
     }}>
       {children}
     </DashboardContext.Provider>

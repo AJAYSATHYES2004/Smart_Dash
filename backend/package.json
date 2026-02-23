@@ -4,17 +4,37 @@
     "description": "Backend for Digital Drive Assistant",
     "main": "server.js",
     "scripts": {
-        "start": "node server.js",
-        "dev": "nodemon server.js"
+        "start": "ts-node src/server.ts",
+        "dev": "nodemon src/server.ts",
+        "test": "vitest run",
+        "test:watch": "vitest",
+        "test:unit": "vitest run tests/faceRecognition.test.js",
+        "test:integration": "vitest run tests/auth.integration.test.js",
+        "test:coverage": "vitest run --coverage"
     },
     "dependencies": {
+        "bcryptjs": "^3.0.3",
+        "canvas": "^3.2.1",
         "cors": "^2.8.5",
         "dotenv": "^16.4.5",
         "express": "^4.19.2",
+        "face-api.js": "^0.22.2",
+        "jsonwebtoken": "^9.0.3",
         "mongoose": "^8.3.0",
         "multer": "^1.4.5-lts.1"
     },
     "devDependencies": {
-        "nodemon": "^3.1.0"
+        "@types/bcryptjs": "^2.4.6",
+        "@types/cors": "^2.8.19",
+        "@types/express": "^5.0.6",
+        "@types/jsonwebtoken": "^9.0.10",
+        "@types/mongoose": "^5.11.96",
+        "@types/node": "^25.2.3",
+        "@vitest/ui": "^1.6.1",
+        "axios": "^1.13.5",
+        "nodemon": "^3.1.0",
+        "ts-node": "^10.9.2",
+        "typescript": "^5.9.3",
+        "vitest": "^1.6.1"
     }
 }
